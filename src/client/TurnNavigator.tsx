@@ -1,6 +1,5 @@
 /** Scroll-synced turn rail derived from settled user-message nodes. */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { UserMessageNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './TurnNavigator.module.css'
 
@@ -9,7 +8,11 @@ export const MIN_TURNS = 3
 
 /** One marker projected from a settled user message. */
 export interface TurnMarker {
+  /** Durable session-event sequence of the underlying user message. */
   readonly seq: number
+  /** Position of this user row in transcript DOM order (0-based). */
+  readonly index: number
+  /** Compact hover preview text. */
   readonly preview: string
 }
 
@@ -17,20 +20,59 @@ export interface TurnMarker {
 export type TurnNavigatorProps =
   PropsRuntime<'conversation.chat.navigator'> & PropsLocale<'turnNavigator'>
 
+/**
+ * Minimal structural view of one rendered business row, taken from the same
+ * `chat.order` / `chat.nodes` the Chat view renders. `data` carries the
+ * renderer payload; the user renderer payload is the `UserMessageNode`, so
+ * `data.content` holds the message blocks used for hover previews.
+ */
+export interface ChatSliceNode {
+  readonly key: string
+  readonly kind: string
+  readonly anchorSeq: number
+  readonly data: { content?: readonly { type: string; text?: string }[] }
+}
+
+/**
+ * Minimal structural view of the live chat slice (`snapshot.chat`). Kept
+ * structural so the plugin stays compatible across DSH client SDK revisions
+ * instead of pinning one snapshot shape: the host supplies
+ * `{ chat: { order, nodes } }` at runtime.
+ */
+export interface ChatSlice {
+  readonly order: readonly string[]
+  readonly nodes: { get(key: string): ChatSliceNode | undefined }
+}
+
 /** Collapse the text blocks of one user message into a compact hover preview. */
-export function messagePreview(content: UserMessageNode['content']): string {
+export function messagePreview(
+  content: readonly { type: string; text?: string }[] | undefined,
+): string {
+  if (content === undefined) return ''
   return content
-    .flatMap(block => block.type === 'text' ? [block.text] : [])
+    .filter((block): block is { type: 'text'; text: string } =>
+      block.type === 'text' && typeof block.text === 'string')
+    .map(block => block.text)
     .join('\n')
     .replace(/\s+/g, ' ')
     .trim()
 }
 
-/** Find a rendered transcript row by its stable session-event sequence. */
-export function rowForSeq(scrollport: HTMLElement, seq: number): HTMLElement | null {
-  const key = `node:${String(seq)}`
-  for (const row of scrollport.querySelectorAll<HTMLElement>('[data-chat-anchor-key]')) {
-    if (row.dataset.chatAnchorKey === key) return row
+/**
+ * Find the Nth rendered user-message row in the transcript.
+ *
+ * The Chat view marks every business row with `data-chat-flow-kind` (the
+ * node's renderer kind); user rows are exactly `[data-chat-flow-kind="user"]`
+ * in DOM order, which matches the order of `chat.order` from which the
+ * markers are projected. Matching by DOM position — instead of by a key
+ * scheme owned by the host — keeps this plugin decoupled from
+ * host-internal key formats.
+ */
+export function userRowByIndex(scrollport: HTMLElement, index: number): HTMLElement | null {
+  let seen = 0
+  for (const row of scrollport.querySelectorAll<HTMLElement>('[data-chat-flow-kind="user"]')) {
+    if (seen === index) return row
+    seen += 1
   }
   return null
 }
@@ -53,7 +95,7 @@ export function activeTurnSeq(scrollport: HTMLElement, turns: readonly TurnMarke
   let active = earliest
   let found = false
   for (const turn of turns) {
-    const row = rowForSeq(scrollport, turn.seq)
+    const row = userRowByIndex(scrollport, turn.index)
     if (row === null) continue
     found = true
     if (row.getBoundingClientRect().top > readingLine) break
@@ -64,13 +106,28 @@ export function activeTurnSeq(scrollport: HTMLElement, turns: readonly TurnMarke
 
 /** Turn rail with hover/focus previews and direct scroll navigation. */
 export function TurnNavigator({ useSession, loadOlder, t }: TurnNavigatorProps) {
-  const nodes = useSession(snapshot => snapshot.nodes)
+  // Markers come from the live chat slice the Chat view renders, so marker
+  // order always matches transcript DOM order (including older pages loaded
+  // later). The legacy top-level node projection is not used: it can carry
+  // rows the transcript does not render, which would misalign the rail.
+  const chat = useSession(snapshot => (snapshot as unknown as { chat?: ChatSlice }).chat)
   const openState = useSession(snapshot => snapshot.openState)
   const hasMore = useSession(snapshot => snapshot.hasMore)
   const loadingOlder = useSession(snapshot => snapshot.loadingOlder)
-  const turns = useMemo<TurnMarker[]>(() => nodes
-    .filter((node): node is UserMessageNode => node.kind === 'user')
-    .map(node => ({ seq: node.seq, preview: messagePreview(node.content) })), [nodes])
+  const turns = useMemo<TurnMarker[]>(() => {
+    if (chat === undefined) return []
+    const markers: TurnMarker[] = []
+    for (const key of chat.order) {
+      const node = chat.nodes.get(key)
+      if (node === undefined || node.kind !== 'user') continue
+      markers.push({
+        seq: node.anchorSeq,
+        index: markers.length,
+        preview: messagePreview(node.data.content),
+      })
+    }
+    return markers
+  }, [chat])
   const rootRef = useRef<HTMLDivElement>(null)
   const [activeSeq, setActiveSeq] = useState<number | null>(null)
   const [hoveredSeq, setHoveredSeq] = useState<number | null>(null)
@@ -112,14 +169,17 @@ export function TurnNavigator({ useSession, loadOlder, t }: TurnNavigatorProps) 
     ? activeSeq
     : latestSeq
 
-  const jumpTo = (seq: number): void => {
+  const jumpTo = (turn: TurnMarker): void => {
     const scrollport = rootRef.current?.closest<HTMLElement>('[data-conversation-scroll]')
     if (scrollport === null || scrollport === undefined) return
-    const row = rowForSeq(scrollport, seq)
+    const row = userRowByIndex(scrollport, turn.index)
     if (row === null) return
-    scrollport.dispatchEvent(new WheelEvent('wheel', { deltaY: -1 }))
+    // Align the row top with the scrollport top (the same flow-top math the
+    // Chat view uses for its own anchors). The resulting scroll event flows
+    // through the ordinary listener path, so the reading-line highlight
+    // follows through the coalesced update.
     scrollport.scrollTop += row.getBoundingClientRect().top - scrollport.getBoundingClientRect().top
-    setActiveSeq(seq)
+    setActiveSeq(turn.seq)
   }
 
   return (
@@ -136,7 +196,7 @@ export function TurnNavigator({ useSession, loadOlder, t }: TurnNavigatorProps) 
               className={css.marker}
               aria-label={t('marker.aria', { index: number, preview })}
               aria-current={turn.seq === currentSeq ? 'step' : undefined}
-              onClick={() => { jumpTo(turn.seq) }}
+              onClick={() => { jumpTo(turn) }}
               onMouseEnter={() => { setHoveredSeq(turn.seq) }}
               onMouseLeave={() => { setHoveredSeq(null) }}
               onFocus={() => { setHoveredSeq(turn.seq) }}

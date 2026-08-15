@@ -37,14 +37,14 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ],
+      "platform": "web"
     }
-  },
-  "dshClient": {
-    "inject": [
-      "@deepseek-ai/dsh-client-locale",
-      "@deepseek-ai/dsh-client-ui-conversation"
-    ],
-    "platform": "web"
   },
   "files": [
     "lib/index.js",

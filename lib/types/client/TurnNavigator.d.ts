@@ -1,18 +1,62 @@
-import type { UserMessageNode } from '@deepseek-ai/dsh-client-runtime/client';
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 /** Minimum user-turn count at which navigation provides more value than noise. */
 export declare const MIN_TURNS = 3;
 /** One marker projected from a settled user message. */
 export interface TurnMarker {
+    /** Durable session-event sequence of the underlying user message. */
     readonly seq: number;
+    /** Position of this user row in transcript DOM order (0-based). */
+    readonly index: number;
+    /** Compact hover preview text. */
     readonly preview: string;
 }
 /** Full props supplied by the session-scoped navigator slot and locale seat. */
 export type TurnNavigatorProps = PropsRuntime<'conversation.chat.navigator'> & PropsLocale<'turnNavigator'>;
+/**
+ * Minimal structural view of one rendered business row, taken from the same
+ * `chat.order` / `chat.nodes` the Chat view renders. `data` carries the
+ * renderer payload; the user renderer payload is the `UserMessageNode`, so
+ * `data.content` holds the message blocks used for hover previews.
+ */
+export interface ChatSliceNode {
+    readonly key: string;
+    readonly kind: string;
+    readonly anchorSeq: number;
+    readonly data: {
+        content?: readonly {
+            type: string;
+            text?: string;
+        }[];
+    };
+}
+/**
+ * Minimal structural view of the live chat slice (`snapshot.chat`). Kept
+ * structural so the plugin stays compatible across DSH client SDK revisions
+ * instead of pinning one snapshot shape: the host supplies
+ * `{ chat: { order, nodes } }` at runtime.
+ */
+export interface ChatSlice {
+    readonly order: readonly string[];
+    readonly nodes: {
+        get(key: string): ChatSliceNode | undefined;
+    };
+}
 /** Collapse the text blocks of one user message into a compact hover preview. */
-export declare function messagePreview(content: UserMessageNode['content']): string;
-/** Find a rendered transcript row by its stable session-event sequence. */
-export declare function rowForSeq(scrollport: HTMLElement, seq: number): HTMLElement | null;
+export declare function messagePreview(content: readonly {
+    type: string;
+    text?: string;
+}[] | undefined): string;
+/**
+ * Find the Nth rendered user-message row in the transcript.
+ *
+ * The Chat view marks every business row with `data-chat-flow-kind` (the
+ * node's renderer kind); user rows are exactly `[data-chat-flow-kind="user"]`
+ * in DOM order, which matches the order of `chat.order` from which the
+ * markers are projected. Matching by DOM position — instead of by a key
+ * scheme owned by the host — keeps this plugin decoupled from
+ * host-internal key formats.
+ */
+export declare function userRowByIndex(scrollport: HTMLElement, index: number): HTMLElement | null;
 /**
  * Resolve the turn crossing the reading line. The bottom position always
  * selects the newest turn, including a transcript shorter than its viewport.

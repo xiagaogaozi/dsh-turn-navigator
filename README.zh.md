@@ -12,20 +12,22 @@
 
 ## 安装
 
-该插件为私有插件，不会发布。其私有仓库为 `dsh-external/dsh-turn-navigator`，但在首次经过评审的推送完成前，该仓库仍为空。在经过评审的 commit 可用前，请使用本地安装路径，然后启动 Web：
+该插件未发布到 npm。本公开仓库为维护主场（`xiagaogaozi/dsh-turn-navigator`），从仓库安装后重启 Web：
 
 ```sh
+dsh plugin --profile web add "git+https://github.com/xiagaogaozi/dsh-turn-navigator.git"
+dsh web
+```
+
+或安装本地检出（开发模式）：
+
+```sh
+git clone https://github.com/xiagaogaozi/dsh-turn-navigator.git
 dsh plugin --profile web add -w "/path/to/dsh-turn-navigator"
 dsh web
 ```
 
-首次推送经过评审的 commit 后，使用以下命令安装该私有仓库的确切修订版本：
-
-```sh
-dsh plugin --profile web add -w github:dsh-external/dsh-turn-navigator#<reviewed-commit>
-```
-
-已提交的 `lib/` 输出无需重新构建即可安装。需要兼容的 DSH Web 版本。删除插件：
+已提交的 `lib/` 输出无需重新构建即可安装。需要兼容的 DSH Web 版本（宿主必须提供 `conversation.chat.navigator` slot）。删除插件：
 
 ```sh
 dsh plugin --profile web remove -w @deepseek-ai/dsh-turn-navigator
@@ -90,6 +92,13 @@ pnpm run check
 
 ## 已知限制与暂缓事项
 
-- 私有 `0.0.1-rc.2` SDK 尚未声明[所需的 `conversation.chat.navigator` slot](#所需的-dsh-web-slot)，因此完整开发检查仍会被阻塞，直到发布匹配的官方 SDK 版本。不要添加本地类型 shim；安装目标必须提供真实 slot。
+- 私有 `0.0.1-rc.2` SDK 未声明[所需的 `conversation.chat.navigator` slot](#所需的-dsh-web-slot)；安装目标必须提供真实 slot（公开 DSH `0.1.0-rc.5` 由宿主构建补上插槽后可用）。
+- 行匹配遵循 transcript 的 DOM 契约（按 DOM 顺序取 `data-chat-flow-kind="user"` 行），而非宿主 key 方案；若宿主不再在用户行上输出 `data-chat-flow-kind`，跳转与高亮会失效。
 - 只有已加载的历史记录才会生成标记；加载更早的历史后，更早的轮次才会显示。
 - 预览仅显示文本。
+
+## 变更记录（本 fork）
+
+- `2026-08` 修复对公开 DSH transcript DOM 的跳转/高亮：用户行改为按 DOM 位置匹配（`[data-chat-flow-kind="user"]`），不再使用私有 `node:<seq>` anchor-key 方案（该方案与宿主行 key 完全不匹配）。
+- `2026-08` 标记改从实时 chat 切片投影（`snapshot.chat.order` / `chat.nodes`，与 Chat 视图同源），不再使用顶层 legacy 节点投影，保证标记顺序恒等于 transcript DOM 顺序。
+- `2026-08` 移除 `jumpTo` 中合成的 wheel 派发（滚动语义归宿主）；跳转对齐改用与 Chat 视图锚点相同的 flow-top 算法。

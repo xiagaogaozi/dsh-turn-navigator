@@ -12,20 +12,26 @@ It supports keyboard focus, light and dark themes, and reduced-motion preference
 
 ## Installation
 
-The plugin is private and not published. Its private repository is `dsh-external/dsh-turn-navigator`, but the repository remains empty until the first reviewed push. Use the local installation path until a reviewed commit is available, then start Web:
+The plugin is not published to npm. This public repository is the maintained
+home (`xiagaogaozi/dsh-turn-navigator`); install it from the repo and restart
+Web:
 
 ```sh
+dsh plugin --profile web add "git+https://github.com/xiagaogaozi/dsh-turn-navigator.git"
+dsh web
+```
+
+Or install a local checkout (development):
+
+```sh
+git clone https://github.com/xiagaogaozi/dsh-turn-navigator.git
 dsh plugin --profile web add -w "/path/to/dsh-turn-navigator"
 dsh web
 ```
 
-After the first reviewed commit is pushed, install that exact private revision with:
-
-```sh
-dsh plugin --profile web add -w github:dsh-external/dsh-turn-navigator#<reviewed-commit>
-```
-
-The checked-in `lib/` output installs without rebuilding. A compatible DSH Web version is required. To remove the plugin:
+The checked-in `lib/` output installs without rebuilding. A compatible DSH
+Web version is required (the `conversation.chat.navigator` slot must exist in
+the host). To remove the plugin:
 
 ```sh
 dsh plugin --profile web remove -w @deepseek-ai/dsh-turn-navigator
@@ -90,6 +96,18 @@ None.
 
 ## Known Limitations and Deferred Work
 
-- The private `0.0.1-rc.2` SDK does not yet declare the [required `conversation.chat.navigator` slot](#required-dsh-web-slot), so the full development check remains blocked until a matching official SDK release. Do not add a local type shim; the installation target must provide the real slot.
+- The private `0.0.1-rc.2` SDK does not declare the [required `conversation.chat.navigator` slot](#required-dsh-web-slot); targets must provide the real slot (public DSH `0.1.0-rc.5` with the slot added by the host build does).
+- Row matching follows the transcript DOM contract (`data-chat-flow-kind="user"` in DOM order) rather than a host key scheme; a host that stops emitting `data-chat-flow-kind` on user rows breaks jump/highlight.
 - Only loaded history receives markers; earlier turns appear after older history is loaded.
 - Previews show text only.
+
+## Changelog (this fork)
+
+- `2026-08` Fix jump/highlight against the public DSH transcript DOM: user rows are
+  matched by DOM position (`[data-chat-flow-kind="user"]`) instead of the private
+  `node:<seq>` anchor-key scheme, which never matched the host rows.
+- `2026-08` Markers now project from the live chat slice (`snapshot.chat.order` /
+  `chat.nodes`, the same source the Chat view renders) instead of the legacy
+  top-level node projection, so marker order always equals transcript DOM order.
+- `2026-08` Drop the synthetic wheel dispatch from `jumpTo` (the host owns wheel
+  semantics); jump alignment uses the same flow-top math as the Chat view anchors.
