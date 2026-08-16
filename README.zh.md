@@ -27,49 +27,24 @@ dsh plugin --profile web add -w "/path/to/dsh-turn-navigator"
 dsh web
 ```
 
-已提交的 `lib/` 输出无需重新构建即可安装。需要兼容的 DSH Web 版本（宿主必须提供 `conversation.chat.navigator` slot）。删除插件：
+已提交的 `lib/` 输出无需重新构建即可安装。插件使用 DSH Web 已有的标准会话页头 action 插槽，无需自改 Harness 源码。删除插件：
 
 ```sh
 dsh plugin --profile web remove -w @deepseek-ai/dsh-turn-navigator
 ```
 
-## 所需的 DSH Web slot
+## 宿主兼容性
 
-该插件注册到 `conversation.chat.navigator`；它并不拥有或渲染这个 slot。兼容的 DSH Web 构建必须在宿主运行时和官方私有 client SDK 声明中同时交付相同契约。插件内的类型扩充不能替代这一要求：它可能让 TypeScript 检查通过，但不渲染该 slot 的宿主不会显示导航，也不会报告错误。
+插件把生命周期桥接注册到已有的会话级
+`conversation.session.header.actions` 插槽。它不会渲染页头按钮：宿主渲染当前会话后，桥接层会把导航条 Portal 到该会话滚动容器的开头。桥接层会点击宿主已有的第一个分页按钮，因此加载更早历史仍走 ChatView 原有的阅读锚点保持逻辑。
 
-请在负责该 slot 的 `@deepseek-ai/dsh-client-ui-conversation` 包中添加以下内容：
+它只依赖以下公开的宿主 DOM 契约：
 
-1. 在 slot 契约中声明一个会话级 single slot，由 owner 提供保持锚点的更早历史加载能力，并将它加入 chat view 的 `PropsRenderSlots` union：
+- 同时包含 `[data-chat-flow]` 的 `[data-conversation-scroll]` 是当前 transcript；
+- `[data-chat-flow-kind="user"]` 按 DOM 顺序标记用户消息行；
+- 存在更早历史时，`[data-chat-flow]` 的第一个子元素中包含宿主的历史分页按钮。
 
-```ts
-export interface TurnNavigatorOwnerProps {
-  loadOlder: () => void
-}
-
-interface SlotMap {
-  'conversation.chat.navigator': {
-    kind: 'single'
-    scope: 'session'
-    owner: TurnNavigatorOwnerProps
-  }
-}
-```
-
-2. 在 chat view 注册中，以相同 kind 和 scope 声明其 child slot：
-
-```ts
-children: {
-  'conversation.chat.navigator': { kind: 'single', scope: 'session' },
-}
-```
-
-3. 在 chat view 组件中，在 transcript 滚动容器旁渲染该 slot，并传入回调；在更早历史记录添加到开头时，该回调会保持当前阅读行不变：
-
-```tsx
-{renderSlot('conversation.chat.navigator', { loadOlder: loadOlderAnchored })}
-```
-
-4. 在宿主包测试中覆盖声明和资源释放、渲染分发以及保持锚点的更早历史加载，然后为 `@deepseek-ai/dsh-client-ui-conversation` 及其对齐的 client peers 发布匹配的私有 SDK 版本。如果外部插件只基于 registry 中的官方包开发，仅修改宿主源码并不能解除阻塞。
+如果后续 DSH Web 版本改变这些 DOM 契约，导航条可能无法显示，或失去跳转/分页功能；但安装或移除本插件不再需要修改 Harness 源码。
 
 ## 开发与验证
 
@@ -92,7 +67,6 @@ pnpm run check
 
 ## 已知限制与暂缓事项
 
-- 私有 `0.0.1-rc.2` SDK 未声明[所需的 `conversation.chat.navigator` slot](#所需的-dsh-web-slot)；安装目标必须提供真实 slot（公开 DSH `0.1.0-rc.5` 由宿主构建补上插槽后可用）。
 - 行匹配遵循 transcript 的 DOM 契约（按 DOM 顺序取 `data-chat-flow-kind="user"` 行），而非宿主 key 方案；若宿主不再在用户行上输出 `data-chat-flow-kind`，跳转与高亮会失效。
 - 只有已加载的历史记录才会生成标记；加载更早的历史后，更早的轮次才会显示。
 - 预览仅显示文本。
@@ -102,3 +76,4 @@ pnpm run check
 - `2026-08` 修复对公开 DSH transcript DOM 的跳转/高亮：用户行改为按 DOM 位置匹配（`[data-chat-flow-kind="user"]`），不再使用私有 `node:<seq>` anchor-key 方案（该方案与宿主行 key 完全不匹配）。
 - `2026-08` 标记改从实时 chat 切片投影（`snapshot.chat.order` / `chat.nodes`，与 Chat 视图同源），不再使用顶层 legacy 节点投影，保证标记顺序恒等于 transcript DOM 顺序。
 - `2026-08` 移除 `jumpTo` 中合成的 wheel 派发（滚动语义归宿主）；跳转对齐改用与 Chat 视图锚点相同的 flow-top 算法。
+- `2026-08` 将对私有 `conversation.chat.navigator` 的依赖替换为基于标准会话页头 action 插槽的 Portal 桥接层；插件现在无需自改 Harness 源码即可工作。

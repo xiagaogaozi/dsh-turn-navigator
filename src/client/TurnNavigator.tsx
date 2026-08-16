@@ -1,5 +1,6 @@
 /** Scroll-synced turn rail derived from settled user-message nodes. */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './TurnNavigator.module.css'
 
@@ -16,9 +17,16 @@ export interface TurnMarker {
   readonly preview: string
 }
 
-/** Full props supplied by the session-scoped navigator slot and locale seat. */
+/** Full props supplied by the portal bridge and locale seat. */
 export type TurnNavigatorProps =
-  PropsRuntime<'conversation.chat.navigator'> & PropsLocale<'turnNavigator'>
+  PropsRuntime<'conversation.session.header.actions'> & PropsLocale<'turnNavigator'> & {
+    /** Delegate older-history paging to ChatView's anchored host button. */
+    readonly loadOlder: () => void
+  }
+
+/** Props supplied by the existing header-action seat to the portal bridge. */
+export type TurnNavigatorPortalsProps =
+  PropsRuntime<'conversation.session.header.actions'> & PropsLocale<'turnNavigator'>
 
 /**
  * Minimal structural view of one rendered business row, taken from the same
@@ -42,6 +50,92 @@ export interface ChatSliceNode {
 export interface ChatSlice {
   readonly order: readonly string[]
   readonly nodes: { get(key: string): ChatSliceNode | undefined }
+}
+
+/** Find the active conversation's scroll owner without assuming host key formats. */
+export function conversationScrollport(): HTMLElement | null {
+  for (const candidate of document.querySelectorAll<HTMLElement>('[data-conversation-scroll]')) {
+    if (candidate.querySelector('[data-chat-flow]') !== null) return candidate
+  }
+  return null
+}
+
+/**
+ * Put the portal mount before transcript flow so the navigator's sticky rail
+ * is available throughout the entire scroll range, not only after the last
+ * message. `display: contents` keeps this plugin-owned mount layout-neutral.
+ */
+function portalMountFor(scrollport: HTMLElement, current: HTMLElement | null): HTMLElement {
+  if (current !== null && current.isConnected && current.parentElement === scrollport) return current
+  const mount = document.createElement('div')
+  mount.dataset.turnNavigatorPortal = ''
+  mount.style.display = 'contents'
+  scrollport.prepend(mount)
+  return mount
+}
+
+/** Click the host's own paging control so ChatView preserves the reading anchor. */
+export function loadOlderFromHost(scrollport: HTMLElement): void {
+  const button = scrollport
+    .querySelector<HTMLElement>('[data-chat-flow]')
+    ?.firstElementChild
+    ?.querySelector<HTMLButtonElement>('button[type="button"]')
+  if (button !== undefined && button !== null && !button.disabled) button.click()
+}
+
+/**
+ * Session-scoped compatibility bridge. The public header action seat gives
+ * this plugin the normal session kit; its visual content is portaled into the
+ * transcript scroll owner, which requires no private host slot.
+ */
+export function TurnNavigatorPortals({ useSession, t }: TurnNavigatorPortalsProps) {
+  const mountRef = useRef<HTMLElement | null>(null)
+  const [mount, setMount] = useState<HTMLElement | null>(null)
+
+  useLayoutEffect(() => {
+    let active = true
+    let queued = false
+    const refresh = () => {
+      if (!active) return
+      const scrollport = conversationScrollport()
+      const next = scrollport === null ? null : portalMountFor(scrollport, mountRef.current)
+      if (mountRef.current !== null && mountRef.current !== next && mountRef.current.isConnected) {
+        mountRef.current.remove()
+      }
+      mountRef.current = next
+      setMount(current => current === next ? current : next)
+    }
+    const queueRefresh = () => {
+      if (queued || !active) return
+      queued = true
+      queueMicrotask(() => {
+        queued = false
+        refresh()
+      })
+    }
+    refresh()
+    const observer = new MutationObserver(queueRefresh)
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => {
+      active = false
+      observer.disconnect()
+      mountRef.current?.remove()
+      mountRef.current = null
+    }
+  }, [])
+
+  if (mount === null) return null
+  return createPortal(
+    <TurnNavigator
+      useSession={useSession}
+      loadOlder={() => {
+        const scrollport = mount.parentElement
+        if (scrollport instanceof HTMLElement) loadOlderFromHost(scrollport)
+      }}
+      t={t}
+    />,
+    mount,
+  )
 }
 
 /** Collapse the text blocks of one user message into a compact hover preview. */

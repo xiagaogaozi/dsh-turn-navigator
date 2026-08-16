@@ -29,51 +29,32 @@ dsh plugin --profile web add -w "/path/to/dsh-turn-navigator"
 dsh web
 ```
 
-The checked-in `lib/` output installs without rebuilding. A compatible DSH
-Web version is required (the `conversation.chat.navigator` slot must exist in
-the host). To remove the plugin:
+The checked-in `lib/` output installs without rebuilding. The plugin uses the
+standard session-header action seat that DSH Web already ships; it does not
+need a custom Harness source patch. To remove the plugin:
 
 ```sh
 dsh plugin --profile web remove -w @deepseek-ai/dsh-turn-navigator
 ```
 
-## Required DSH Web slot
+## Host compatibility
 
-This plugin registers into `conversation.chat.navigator`; it does not own or render that slot. A compatible DSH Web build must ship the same contract in both the host runtime and the official private client SDK declarations. A plugin-local type augmentation is not a substitute: it could make TypeScript pass while a host that does not render the slot silently shows no navigator.
+The plugin registers a lifecycle bridge in the existing
+`conversation.session.header.actions` session slot. It renders no header
+button: after the host renders the active conversation, the bridge portals the
+navigator into the start of that conversation's scroll container. The bridge
+uses the host's own first paging button, so loading older history continues to
+use ChatView's anchored paging behavior.
 
-Add the slot in the owning `@deepseek-ai/dsh-client-ui-conversation` package at these points:
+This deliberately depends only on public host DOM contracts:
 
-1. In the slot contract, declare a session-scoped single slot whose owner supplies anchored older-history loading, and include it in the chat view's `PropsRenderSlots` union:
+- `[data-conversation-scroll]` containing `[data-chat-flow]` identifies the active transcript;
+- `[data-chat-flow-kind="user"]` identifies user rows in DOM order;
+- the first child of `[data-chat-flow]` contains the host's older-history paging button when one is available.
 
-```ts
-export interface TurnNavigatorOwnerProps {
-  loadOlder: () => void
-}
-
-interface SlotMap {
-  'conversation.chat.navigator': {
-    kind: 'single'
-    scope: 'session'
-    owner: TurnNavigatorOwnerProps
-  }
-}
-```
-
-2. In the chat view registration, claim the child slot with the same kind and scope:
-
-```ts
-children: {
-  'conversation.chat.navigator': { kind: 'single', scope: 'session' },
-}
-```
-
-3. In the chat view component, render the slot beside the transcript scroll container and pass the callback that preserves the current reading row while older history is prepended:
-
-```tsx
-{renderSlot('conversation.chat.navigator', { loadOlder: loadOlderAnchored })}
-```
-
-4. Cover declaration and disposal, render dispatch, and anchored older-history loading in the host package tests, then publish a matching private SDK version for `@deepseek-ai/dsh-client-ui-conversation` and its aligned client peers. A source-only host change does not unblock an external plugin that develops only against official registry packages.
+If a future DSH Web release changes those DOM contracts, the navigator may stop
+appearing or lose jump/paging behavior, but Harness source does not need to be
+modified to install or remove this plugin.
 
 ## Development and verification
 
@@ -96,7 +77,6 @@ None.
 
 ## Known Limitations and Deferred Work
 
-- The private `0.0.1-rc.2` SDK does not declare the [required `conversation.chat.navigator` slot](#required-dsh-web-slot); targets must provide the real slot (public DSH `0.1.0-rc.5` with the slot added by the host build does).
 - Row matching follows the transcript DOM contract (`data-chat-flow-kind="user"` in DOM order) rather than a host key scheme; a host that stops emitting `data-chat-flow-kind` on user rows breaks jump/highlight.
 - Only loaded history receives markers; earlier turns appear after older history is loaded.
 - Previews show text only.
@@ -111,3 +91,6 @@ None.
   top-level node projection, so marker order always equals transcript DOM order.
 - `2026-08` Drop the synthetic wheel dispatch from `jumpTo` (the host owns wheel
   semantics); jump alignment uses the same flow-top math as the Chat view anchors.
+- `2026-08` Replace the private `conversation.chat.navigator` dependency with a
+  portal bridge rooted in the standard session-header action slot. The plugin
+  now works without a Harness source patch.

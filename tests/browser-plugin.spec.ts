@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { apply, inject } from '../src/client/index.ts'
-import { TurnNavigator } from '../src/client/TurnNavigator.tsx'
+import { TurnNavigatorPortals } from '../src/client/TurnNavigator.tsx'
 
 describe('standalone browser plugin wiring', () => {
-  it('waits for the chat declaration and registers localized chrome', () => {
+  it('uses the existing session-header action seat as its portal lifecycle owner', () => {
     const unregisterLocale = vi.fn()
     const unregisterSlot = vi.fn()
     const registerLocale = vi.fn(() => unregisterLocale)
@@ -23,10 +23,10 @@ describe('standalone browser plugin wiring', () => {
     expect(inject).toEqual(['slots', 'locale'])
     expect(effects).toHaveLength(1)
     expect(registerLocale).toHaveBeenCalledWith('turnNavigator', expect.any(Object))
-    expect(injectSlot).toHaveBeenCalledWith('conversation.chat.navigator', expect.any(Function))
+    expect(injectSlot).toHaveBeenCalledWith('conversation.session.header.actions', expect.any(Function))
     expect(registerSlot).toHaveBeenCalledWith(
-      { name: 'conversation.chat.navigator', locale: 'turnNavigator' },
-      TurnNavigator,
+      { name: 'conversation.session.header.actions', id: 'turn-navigator-portals', order: 100, locale: 'turnNavigator' },
+      TurnNavigatorPortals,
     )
   })
 })

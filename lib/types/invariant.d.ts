@@ -2,7 +2,7 @@
  * Package-owned invariant companion for `@deepseek-ai/dsh-turn-navigator`.
  * @module @deepseek-ai/dsh-turn-navigator/invariant
  */
-import type { Context } from 'cordis';
+import type { Context } from '@deepseek-ai/cordis';
 /** Cordis companion plugin name. */
 export declare const name = "turn-navigator-invariant";
 /** Service required before the companion can reserve package ownership. */
