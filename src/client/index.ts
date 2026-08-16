@@ -3,7 +3,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { en, zh, type TurnNavigatorKey } from './locales.ts'
-import { TurnNavigator } from './TurnNavigator.tsx'
+import { TurnNavigatorPortals } from './TurnNavigator.tsx'
 
 export type { TurnNavigatorKey } from './locales.ts'
 
@@ -14,15 +14,15 @@ const NS = 'turnNavigator'
 export const inject = ['slots', 'locale']
 
 /**
- * Register dictionaries and the turn rail after the chat view declares its
- * navigator slot.
+ * Register dictionaries and a session-owned bridge that portals the turn rail
+ * into the existing transcript scroll owner.
  * @param ctx - Client root context.
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-turn-navigator: dictionaries')
-  ctx.slots.inject('conversation.chat.navigator', () => ctx.slots.register(
-    { name: 'conversation.chat.navigator', locale: NS },
-    TurnNavigator,
+  ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register(
+    { name: 'conversation.session.header.actions', id: 'turn-navigator-portals', order: 100, locale: NS },
+    TurnNavigatorPortals,
   ))
 }
 

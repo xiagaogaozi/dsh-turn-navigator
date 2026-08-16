@@ -10,8 +10,13 @@ export interface TurnMarker {
     /** Compact hover preview text. */
     readonly preview: string;
 }
-/** Full props supplied by the session-scoped navigator slot and locale seat. */
-export type TurnNavigatorProps = PropsRuntime<'conversation.chat.navigator'> & PropsLocale<'turnNavigator'>;
+/** Full props supplied by the portal bridge and locale seat. */
+export type TurnNavigatorProps = PropsRuntime<'conversation.session.header.actions'> & PropsLocale<'turnNavigator'> & {
+    /** Delegate older-history paging to ChatView's anchored host button. */
+    readonly loadOlder: () => void;
+};
+/** Props supplied by the existing header-action seat to the portal bridge. */
+export type TurnNavigatorPortalsProps = PropsRuntime<'conversation.session.header.actions'> & PropsLocale<'turnNavigator'>;
 /**
  * Minimal structural view of one rendered business row, taken from the same
  * `chat.order` / `chat.nodes` the Chat view renders. `data` carries the
@@ -41,6 +46,16 @@ export interface ChatSlice {
         get(key: string): ChatSliceNode | undefined;
     };
 }
+/** Find the active conversation's scroll owner without assuming host key formats. */
+export declare function conversationScrollport(): HTMLElement | null;
+/** Click the host's own paging control so ChatView preserves the reading anchor. */
+export declare function loadOlderFromHost(scrollport: HTMLElement): void;
+/**
+ * Session-scoped compatibility bridge. The public header action seat gives
+ * this plugin the normal session kit; its visual content is portaled into the
+ * transcript scroll owner, which requires no private host slot.
+ */
+export declare function TurnNavigatorPortals({ useSession, t }: TurnNavigatorPortalsProps): import("react").JSX.Element | null;
 /** Collapse the text blocks of one user message into a compact hover preview. */
 export declare function messagePreview(content: readonly {
     type: string;
@@ -63,5 +78,5 @@ export declare function userRowByIndex(scrollport: HTMLElement, index: number): 
  */
 export declare function activeTurnSeq(scrollport: HTMLElement, turns: readonly TurnMarker[]): number | null;
 /** Turn rail with hover/focus previews and direct scroll navigation. */
-export declare function TurnNavigator({ useSession, loadOlder, t }: TurnNavigatorProps): import("react").JSX.Element | null;
+export declare function TurnNavigator({ useSession, loadOlder, t }: TurnNavigatorProps): import("react/jsx-runtime").JSX.Element | null;
 //# sourceMappingURL=TurnNavigator.d.ts.map

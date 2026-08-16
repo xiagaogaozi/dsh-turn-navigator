@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   ConversationSnapshot, SessionId, UserMessageNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  activeTurnSeq, messagePreview, MIN_TURNS, TurnNavigator,
+  activeTurnSeq, messagePreview, MIN_TURNS, TurnNavigator, TurnNavigatorPortals,
   userRowByIndex, type ChatSlice, type TurnNavigatorProps, type TurnMarker,
 } from '../src/client/TurnNavigator.tsx'
 import { en } from '../src/client/locales.ts'
@@ -176,6 +176,46 @@ describe('turn projection helpers', () => {
 })
 
 describe('standalone TurnNavigator', () => {
+  it('portals the rail into the live conversation scroll owner', async () => {
+    const current = snapshot([user(1, 'one'), user(2, 'two'), user(3, 'three')])
+    const view = render(
+      <>
+        <div data-conversation-scroll="">
+          <div data-chat-flow="">
+            {[1, 2, 3].map(seq => <div key={seq} data-chat-flow-kind="user" />)}
+          </div>
+        </div>
+        <TurnNavigatorPortals
+          useSession={<T,>(selector: (value: ConversationSnapshot) => T): T => selector(current)}
+          t={translate(en)}
+        />
+      </>,
+    )
+    const scrollport = view.container.querySelector<HTMLElement>('[data-conversation-scroll]')!
+    await waitFor(() => expect(scrollport.querySelector('[data-turn-navigator]')).not.toBeNull())
+    expect(view.queryByRole('navigation', { name: 'Conversation turn navigation' })).not.toBeNull()
+  })
+
+  it('delegates older-history loading to the host paging button', async () => {
+    const current = snapshot([user(2, 'two')], { hasMore: true })
+    const loadOlder = vi.fn()
+    render(
+      <>
+        <div data-conversation-scroll="">
+          <div data-chat-flow="">
+            <div><button type="button" onClick={loadOlder}>Load earlier</button></div>
+            <div data-chat-flow-kind="user" />
+          </div>
+        </div>
+        <TurnNavigatorPortals
+          useSession={<T,>(selector: (value: ConversationSnapshot) => T): T => selector(current)}
+          t={translate(en)}
+        />
+      </>,
+    )
+    await waitFor(() => expect(loadOlder).toHaveBeenCalledTimes(1))
+  })
+
   it('stays absent below three user turns', () => {
     const h = mount([user(1, 'one'), user(2, 'two')])
     expect(MIN_TURNS).toBe(3)

@@ -5,8 +5,8 @@ export type { TurnNavigatorKey } from './locales.ts';
 /** Required services: the chat slot registry and localized preview copy. */
 export declare const inject: string[];
 /**
- * Register dictionaries and the turn rail after the chat view declares its
- * navigator slot.
+ * Register dictionaries and a session-owned bridge that portals the turn rail
+ * into the existing transcript scroll owner.
  * @param ctx - Client root context.
  */
 export declare function apply(ctx: ClientContext): void;

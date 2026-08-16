@@ -6,7 +6,7 @@ import { transform } from 'lightningcss'
 
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
-const CLIENT_EXTERNALS = ['react', 'react/jsx-runtime'] as const
+const CLIENT_EXTERNALS = ['react', 'react/jsx-runtime', 'react-dom'] as const
 
 /** Build host entries and one DSH module-loader browser artifact. */
 export function clientBundle(packageName: string, hostEntries: readonly string[]): UserConfig[] {
